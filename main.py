@@ -2,7 +2,7 @@ import enum
 from argparse import ArgumentParser, FileType
 from enum import Enum
 from logging import DEBUG, debug, getLogger, INFO, Logger, WARNING
-from math import ceil, sqrt
+from math import ceil, floor, sqrt
 from os.path import exists
 from PIL import Image
 from typing import List, Tuple
@@ -14,6 +14,24 @@ class Direction(str, Enum):
 
     HORIZONTAL = "h"
     VERTICAL = "v"
+
+
+@enum.unique
+class HorizontalAlignment(str, Enum):
+    """Enumeration of horizontal tile alignments."""
+
+    CENTER = "c"
+    LEFT = "l"
+    RIGHT = "r"
+
+
+@enum.unique
+class VerticalAlignment(str, Enum):
+    """Enumeration of vertical tile alignments."""
+
+    BOTTOM = "b"
+    MIDDLE = "m"
+    TOP = "t"
 
 
 class CoordinateBuilder:
@@ -137,6 +155,8 @@ class Tableau:
         direction: Direction,
         max_columns: int = 0,
         max_rows: int = 0,
+        horizontal_alignment: HorizontalAlignment = HorizontalAlignment.LEFT,
+        vertical_alignment: VerticalAlignment = VerticalAlignment.TOP,
         logger: Logger = getLogger(),
     ):
         """Creates an image tile tableau.
@@ -148,12 +168,18 @@ class Tableau:
         :param direction: The direction to tile in.
         :param max_columns: Maximum number of columns.
         :param max_rows: Maximum number of rows.
+        :param horizontal_alignment: The horizontal alignment of the tiles.
+        :param vertical_alignment: The vertical alignment of the tiles.
         :param logger: A logger, if you feel like it.
         """
 
+        self._horizontal_alignment = horizontal_alignment
         self._logger = logger
+        self._vertical_alignment = vertical_alignment
 
         self._logger.debug(f"direction {direction}")
+        self._logger.debug(f"horizontal_alignment {self._horizontal_alignment}")
+        self._logger.debug(f"vertical_alignment {self._vertical_alignment}")
 
         # calculate the number of rows, columns and images to output (if a max row & column combination would result in
         # less images than passed in being displayed). If no max for row or column is defined, the calculation attempts
@@ -184,35 +210,38 @@ class Tableau:
 
         # calculate each column's width and row's height
 
-        column_widths = (
+        self._column_widths = (
             self._direction_vector_dimensions(column_count, 0)
             if direction == Direction.HORIZONTAL
             else self._perpendicular_vector_dimensions(column_count, row_count, 0)
         )
-        self._logger.debug(f"column_widths {column_widths}")
-        self.row_heights = (
+        self._logger.debug(f"column_widths {self._column_widths}")
+        self._row_heights = (
             self._perpendicular_vector_dimensions(row_count, column_count, 1)
             if direction == Direction.HORIZONTAL
             else self._direction_vector_dimensions(row_count, 1)
         )
-        self._logger.debug(f"row_heights {self.row_heights}")
+        self._logger.debug(f"row_heights {self._row_heights}")
 
         # calculate the output image's size
 
-        self.output_size = sum(column_widths), sum(self.row_heights)
+        self.output_size = sum(self._column_widths), sum(self._row_heights)
         self._logger.debug(f"output_size {self.output_size}")
 
         # calculate the starting locations by row & column
 
-        self._column_starts = [sum(column_widths[0:i]) for i in range(column_count)]
+        self._column_starts = [sum(self._column_widths[0:i]) for i in range(column_count)]
         self._logger.debug(f"column_starts {self._column_starts}")
-        self._row_starts = [sum(self.row_heights[0:i]) for i in range(row_count)]
+        self._row_starts = [sum(self._row_heights[0:i]) for i in range(row_count)]
         self._logger.debug(f"row_starts {self._row_starts}")
 
         # build the tiles, specifying their locations
 
         coordinate_builder = CoordinateBuilder(direction, column_count, row_count)
-        self.tiles = [Tile(image, self._location_builder(coordinate_builder.next())) for image in images[: self._count]]
+        self.tiles = [
+            Tile(image, self._location_builder(coordinate_builder.next(), image.size))
+            for image in images[: self._count]
+        ]
 
     def _calculate_counts(self, max_directional: int, max_perpendicular: int) -> Tuple[int, int]:
         """Calculates the row and column counts given the tiling direction within the given maximums.
@@ -252,16 +281,37 @@ class Tableau:
             for vector in range(direction_vector_count)
         ]
 
-    def _location_builder(self, coordinates: Tuple[int, int]) -> Tuple[int, int]:
+    def _location_builder(self, coordinates: Tuple[int, int], image_size: Tuple[int, int]) -> Tuple[int, int]:
         """Calculates a tile's pixel location based on its column, row coordinates.
 
         :param coordinates: The column, row coordinates to calculate the location for.
+        :param image_size: The size of the image the location is being calculated for.
         :return: The x,y pixel location for the given coordinates.
         """
 
-        location = self._column_starts[coordinates[0]], self._row_starts[coordinates[1]]
-        self._logger.debug(f"location {location} for coordinates {coordinates}")
-        return location
+        alignment_shift = 0
+        if self._horizontal_alignment == HorizontalAlignment.CENTER:
+            alignment_shift = floor((self._column_widths[coordinates[0]] - image_size[0]) / 2)
+        elif self._horizontal_alignment == HorizontalAlignment.RIGHT:
+            alignment_shift = self._column_widths[coordinates[0]] - image_size[0]
+
+        self._logger.debug(f"horizontal alignment_shift {alignment_shift}")
+
+        x = self._column_starts[coordinates[0]] + alignment_shift
+
+        alignment_shift = 0
+        if self._vertical_alignment == VerticalAlignment.MIDDLE:
+            alignment_shift = floor((self._row_heights[coordinates[1]] - image_size[1]) / 2)
+        elif self._vertical_alignment == VerticalAlignment.BOTTOM:
+            alignment_shift = self._row_heights[coordinates[1]] - image_size[1]
+
+        self._logger.debug(f"vertical alignment_shift {alignment_shift}")
+
+        y = self._row_starts[coordinates[1]] + alignment_shift
+
+        self._logger.debug(f"location {x}, {y} for {coordinates}")
+
+        return x, y
 
     def _perpendicular_vector_dimensions(
         self, perpendicular_vector_count: int, direction_vector_count: int, dimension: int
@@ -316,6 +366,22 @@ def main():
         "-r", "--max-rows", default=0, help="Maximum number of rows of images. If less than 1, no maximum.", type=int
     )
     parser.add_argument("-v", "--verbose", action="count", default=0, help="Verbosity.")
+    parser.add_argument(
+        "-x",
+        "--horizontal-align",
+        choices=[e.value for e in HorizontalAlignment],
+        default=HorizontalAlignment.LEFT,
+        help="Horizontal alignment of image.",
+        type=HorizontalAlignment,
+    )
+    parser.add_argument(
+        "-y",
+        "--vertical-align",
+        choices=[e.value for e in VerticalAlignment],
+        default=VerticalAlignment.TOP,
+        help="Vertical alignment of image.",
+        type=VerticalAlignment,
+    )
     parser.add_argument("input_files", help="Files to tile.", nargs="+", type=FileType("rb"))
 
     args = parser.parse_args()
@@ -338,7 +404,13 @@ def main():
         # build tile tableau
 
         tableau = Tableau(
-            [Image.open(file) for file in args.input_files], args.direction, args.max_columns, args.max_rows, log
+            [Image.open(file) for file in args.input_files],
+            args.direction,
+            args.max_columns,
+            args.max_rows,
+            args.horizontal_align,
+            args.vertical_align,
+            log,
         )
 
         # instantiate output image
