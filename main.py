@@ -5,7 +5,7 @@ from logging import DEBUG, debug, getLogger, INFO, Logger, WARNING
 from math import ceil, floor, sqrt
 from os.path import exists
 from PIL import Image
-from typing import List, Tuple
+from typing import Iterator, List, Tuple
 
 
 @enum.unique
@@ -23,6 +23,24 @@ class HorizontalAlignment(str, Enum):
     CENTER = "c"
     LEFT = "l"
     RIGHT = "r"
+
+
+@enum.unique
+class SizingMode(str, Enum):
+    """Image tile dimension sizing mode."""
+
+    AVERAGE = "a"
+    LARGEST = "l"
+    SMALLEST = "s"
+
+
+@enum.unique
+class StretchMode(str, Enum):
+    """Image tile stretching mode."""
+
+    FILL = "f"
+    ORIGINAL = "o"
+    RATIO = "r"
 
 
 @enum.unique
@@ -146,7 +164,6 @@ class Tableau:
 
     Attributes:
         output_size: Required dimensions of the output image to fit all tiles.
-        tiles: The tiles that the final image will be built using.
     """
 
     def __init__(
@@ -157,6 +174,8 @@ class Tableau:
         max_rows: int = 0,
         horizontal_alignment: HorizontalAlignment = HorizontalAlignment.LEFT,
         vertical_alignment: VerticalAlignment = VerticalAlignment.TOP,
+        sizing_mode: SizingMode = SizingMode.LARGEST,
+        stretch_mode: StretchMode = StretchMode.ORIGINAL,
         logger: Logger = getLogger(),
     ):
         """Creates an image tile tableau.
@@ -169,16 +188,23 @@ class Tableau:
         :param max_columns: Maximum number of columns.
         :param max_rows: Maximum number of rows.
         :param horizontal_alignment: The horizontal alignment of the tiles.
+        :param sizing_mode: The image resizing mode.
+        :param stretch_mode: The image stretching mode.
         :param vertical_alignment: The vertical alignment of the tiles.
         :param logger: A logger, if you feel like it.
         """
 
+        self._direction = direction
         self._horizontal_alignment = horizontal_alignment
         self._logger = logger
+        self._sizing_mode = sizing_mode
+        self._stretch_mode = stretch_mode
         self._vertical_alignment = vertical_alignment
 
-        self._logger.debug(f"direction {direction}")
+        self._logger.debug(f"direction {self._direction}")
         self._logger.debug(f"horizontal_alignment {self._horizontal_alignment}")
+        self._logger.debug(f"resize_mode {self._sizing_mode}")
+        self._logger.debug(f"stretch_mode {self._stretch_mode}")
         self._logger.debug(f"vertical_alignment {self._vertical_alignment}")
 
         # calculate the number of rows, columns and images to output (if a max row & column combination would result in
@@ -197,12 +223,12 @@ class Tableau:
         self._logger.debug(f"image count {self._count}")
 
         if direction == Direction.HORIZONTAL:
-            column_count, row_count = self._calculate_counts(max_columns, max_rows)
+            self._column_count, self._row_count = self._calculate_counts(max_columns, max_rows)
         else:
-            row_count, column_count = self._calculate_counts(max_rows, max_columns)
+            self._row_count, self._column_count = self._calculate_counts(max_rows, max_columns)
 
-        self._logger.debug(f"column_count {column_count}")
-        self._logger.debug(f"row_count {row_count}")
+        self._logger.debug(f"column_count {self._column_count}")
+        self._logger.debug(f"row_count {self._row_count}")
 
         # restrict the image's we're working with
 
@@ -211,15 +237,15 @@ class Tableau:
         # calculate each column's width and row's height
 
         self._column_widths = (
-            self._direction_vector_dimensions(column_count, 0)
+            self._direction_vector_dimensions(self._column_count, 0)
             if direction == Direction.HORIZONTAL
-            else self._perpendicular_vector_dimensions(column_count, row_count, 0)
+            else self._perpendicular_vector_dimensions(self._column_count, self._row_count, 0)
         )
         self._logger.debug(f"column_widths {self._column_widths}")
         self._row_heights = (
-            self._perpendicular_vector_dimensions(row_count, column_count, 1)
+            self._perpendicular_vector_dimensions(self._row_count, self._column_count, 1)
             if direction == Direction.HORIZONTAL
-            else self._direction_vector_dimensions(row_count, 1)
+            else self._direction_vector_dimensions(self._row_count, 1)
         )
         self._logger.debug(f"row_heights {self._row_heights}")
 
@@ -230,18 +256,10 @@ class Tableau:
 
         # calculate the starting locations by row & column
 
-        self._column_starts = [sum(self._column_widths[0:i]) for i in range(column_count)]
+        self._column_starts = [sum(self._column_widths[0:i]) for i in range(self._column_count)]
         self._logger.debug(f"column_starts {self._column_starts}")
-        self._row_starts = [sum(self._row_heights[0:i]) for i in range(row_count)]
+        self._row_starts = [sum(self._row_heights[0:i]) for i in range(self._row_count)]
         self._logger.debug(f"row_starts {self._row_starts}")
-
-        # build the tiles, specifying their locations
-
-        coordinate_builder = CoordinateBuilder(direction, column_count, row_count)
-        self.tiles = [
-            Tile(image, self._location_builder(coordinate_builder.next(), image.size))
-            for image in images[: self._count]
-        ]
 
     def _calculate_counts(self, max_directional: int, max_perpendicular: int) -> Tuple[int, int]:
         """Calculates the row and column counts given the tiling direction within the given maximums.
@@ -336,6 +354,36 @@ class Tableau:
             for vector in range(perpendicular_vector_count)
         ]
 
+    def _resize(self, image: Image.Image, coordinate: Tuple[int, int]) -> Image.Image:
+        """Resizes and stretches an image based on the resize and stretch modes.
+
+        Note: This is not guaranteed to generate a new image. If the image did not need to be resized, no new image will
+        be generated.
+
+        :param image: The image to resize & stretch.
+        :param coordinate: The image's coordinates.
+        :return: The resized & stretched image. Note: this is potentially the original image.
+        """
+
+        # this mode combination requires no resizing
+        if self._stretch_mode == StretchMode.ORIGINAL and self._sizing_mode == SizingMode.LARGEST:
+            return image
+
+        return image
+
+    def tiles(self) -> Iterator[Tile]:
+        """Generates the tiles, with their location and sizes calculated.
+
+        :return: Yields an iterator of the image tiles.
+        """
+
+        coordinate_builder = CoordinateBuilder(self._direction, self._column_count, self._row_count)
+
+        for image in self._images:
+            coordinate = coordinate_builder.next()
+            resized_imaged = self._resize(image, coordinate)
+            yield Tile(resized_imaged, self._location_builder(coordinate, image.size))
+
 
 def main():
     """Entry point."""
@@ -370,12 +418,34 @@ def main():
     # force output image writing
     parser.add_argument("-f", "--force", action="store_true", help="Overwrite output file if it exists.")
 
+    # stretching mode
+    # TODO: linting thinks e.value is an unresolved reference, figure out why
+    parser.add_argument(
+        "-m",
+        "--stretch",
+        choices=[e.value for e in StretchMode],
+        default=StretchMode.ORIGINAL,
+        help="Image stretching mode.",
+        type=StretchMode,
+    )
+
     # output file path
     parser.add_argument("-o", "--output", help="Output file name.", required=True)
 
     # maximum rows
     parser.add_argument(
         "-r", "--max-rows", default=0, help="Maximum number of rows of images. If less than 1, no maximum.", type=int
+    )
+
+    # sizing mode
+    # TODO: linting thinks e.value is an unresolved reference, figure out why
+    parser.add_argument(
+        "-s",
+        "--sizing",
+        choices=[e.value for e in SizingMode],
+        default=SizingMode.LARGEST,
+        help="Tile sizing mode.",
+        type=SizingMode,
     )
 
     # logging verbosity
@@ -432,6 +502,8 @@ def main():
             args.max_rows,
             args.horizontal_align,
             args.vertical_align,
+            args.sizing,
+            args.stretch,
             log,
         )
 
@@ -441,7 +513,7 @@ def main():
 
         # paste tiles onto output image
 
-        for tile in tableau.tiles:
+        for tile in tableau.tiles():
             log.debug(f"location {tile.location}")
             output_image.paste(tile.image, tile.location)
 
