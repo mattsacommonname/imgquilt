@@ -344,7 +344,10 @@ def main():
 
     parser = ArgumentParser()
 
+    # background color
     parser.add_argument("-b", "--background-color", default="white", help="Background color for gaps between images.")
+
+    # maximum columns
     parser.add_argument(
         "-c",
         "--max-columns",
@@ -352,6 +355,9 @@ def main():
         help="Maximum number of columns of images. If set less than 1, no maximum.",
         type=int,
     )
+
+    # tiling direction
+    # TODO: linting thinks e.value is an unresolved reference, figure out why
     parser.add_argument(
         "-d",
         "--direction",
@@ -359,13 +365,24 @@ def main():
         default=Direction.HORIZONTAL,
         help="The direction to place the tiles in.",
         type=Direction,
-    )  # TODO: linting thinks e.value is an unresolved reference, figure out why
+    )
+
+    # force output image writing
     parser.add_argument("-f", "--force", action="store_true", help="Overwrite output file if it exists.")
+
+    # output file path
     parser.add_argument("-o", "--output", help="Output file name.", required=True)
+
+    # maximum rows
     parser.add_argument(
         "-r", "--max-rows", default=0, help="Maximum number of rows of images. If less than 1, no maximum.", type=int
     )
+
+    # logging verbosity
     parser.add_argument("-v", "--verbose", action="count", default=0, help="Verbosity.")
+
+    # horizontal alignment
+    # TODO: linting thinks e.value is an unresolved reference, figure out why
     parser.add_argument(
         "-x",
         "--horizontal-align",
@@ -374,6 +391,9 @@ def main():
         help="Horizontal alignment of image.",
         type=HorizontalAlignment,
     )
+
+    # vertical alignment
+    # TODO: linting thinks e.value is an unresolved reference, figure out why
     parser.add_argument(
         "-y",
         "--vertical-align",
@@ -382,6 +402,8 @@ def main():
         help="Vertical alignment of image.",
         type=VerticalAlignment,
     )
+
+    # input file paths
     parser.add_argument("input_files", help="Files to tile.", nargs="+", type=FileType("rb"))
 
     args = parser.parse_args()
