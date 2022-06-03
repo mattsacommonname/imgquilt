@@ -170,12 +170,12 @@ class Tableau:
         self,
         images: List[Image.Image],
         direction: Direction,
-        max_columns: int = 0,
-        max_rows: int = 0,
-        horizontal_alignment: HorizontalAlignment = HorizontalAlignment.LEFT,
-        vertical_alignment: VerticalAlignment = VerticalAlignment.TOP,
-        sizing_mode: SizingMode = SizingMode.LARGEST,
-        stretch_mode: StretchMode = StretchMode.ORIGINAL,
+        max_columns: int,
+        max_rows: int,
+        horizontal_alignment: HorizontalAlignment,
+        vertical_alignment: VerticalAlignment,
+        sizing_mode: SizingMode,
+        stretch_mode: StretchMode,
         logger: Logger = getLogger(),
     ):
         """Creates an image tile tableau.
