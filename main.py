@@ -391,6 +391,7 @@ def main():
     # arguments
 
     parser = ArgumentParser()
+    e: Direction  # to prevent the linter from getting confused about the type of the enum element
 
     # background color
     parser.add_argument("-b", "--background-color", default="white", help="Background color for gaps between images.")
@@ -405,7 +406,6 @@ def main():
     )
 
     # tiling direction
-    # TODO: linting thinks e.value is an unresolved reference, figure out why
     parser.add_argument(
         "-d",
         "--direction",
@@ -419,7 +419,6 @@ def main():
     parser.add_argument("-f", "--force", action="store_true", help="Overwrite output file if it exists.")
 
     # stretching mode
-    # TODO: linting thinks e.value is an unresolved reference, figure out why
     parser.add_argument(
         "-m",
         "--stretch",
@@ -438,7 +437,6 @@ def main():
     )
 
     # sizing mode
-    # TODO: linting thinks e.value is an unresolved reference, figure out why
     parser.add_argument(
         "-s",
         "--sizing",
@@ -452,7 +450,6 @@ def main():
     parser.add_argument("-v", "--verbose", action="count", default=0, help="Verbosity.")
 
     # horizontal alignment
-    # TODO: linting thinks e.value is an unresolved reference, figure out why
     parser.add_argument(
         "-x",
         "--horizontal-align",
@@ -463,7 +460,6 @@ def main():
     )
 
     # vertical alignment
-    # TODO: linting thinks e.value is an unresolved reference, figure out why
     parser.add_argument(
         "-y",
         "--vertical-align",
