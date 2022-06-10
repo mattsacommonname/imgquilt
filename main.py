@@ -279,8 +279,15 @@ class Tableau:
             directional_count = min(directional_count, max_directional)
             perpendicular_count = ceil(self._count / directional_count)
         elif max_directional > 0 and max_perpendicular > 0:
-            directional_count = min(directional_count, max_directional)
-            perpendicular_count = min(ceil(self._count / directional_count), max_perpendicular)
+            if (max_directional * max_perpendicular) == self._count:
+                directional_count = max_directional
+                perpendicular_count = max_perpendicular
+            elif max_perpendicular < max_directional:
+                perpendicular_count = max_perpendicular
+                directional_count = ceil(self._count / perpendicular_count)
+            else:  # max_directional <= max_perpendicular
+                directional_count = max_directional
+                perpendicular_count = ceil(self._count / directional_count)
 
         return directional_count, perpendicular_count
 
