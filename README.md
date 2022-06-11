@@ -5,7 +5,7 @@ Stitches images together into a bigger image.
 ## Requirements
 
 - I've not tested it below Python 3.8.
-- I suspect [Pillow](https://python-pillow.org) has requirements, but I've not looked into them yet.
+- [Pillow](https://python-pillow.org) has [external library](https://pillow.readthedocs.io/en/stable/installation.html#external-libraries) requirements, but I've not looked deeply into them yet.
 
 ## Use
 
