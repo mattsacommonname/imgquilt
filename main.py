@@ -372,11 +372,31 @@ class Tableau:
         :return: The resized & stretched image. Note: this is potentially the original image.
         """
 
-        # this mode combination requires no resizing
-        if self._stretch_mode == StretchMode.ORIGINAL and self._sizing_mode == SizingMode.LARGEST:
-            return image
+        if self._stretch_mode == StretchMode.ORIGINAL:
+            return image  # using original size
 
-        return image
+        # get tile's size
+        # if self._stretch_mode == StretchMode.FILL, this will be the new size
+        height = self._row_heights[coordinate[1]]
+        width = self._column_widths[coordinate[0]]
+
+        self._logger.debug(f"tile size: {width}, {height}")
+        self._logger.debug(f"image size: {image.size}")
+
+        if self._stretch_mode == StretchMode.RATIO:
+            new_width = floor(height * image.width / image.height)
+            if new_width <= width:
+                width = new_width
+            else:
+                height = floor(width * image.height / image.width)
+
+        new_size = (width, height)
+        self._logger.debug(f"resized: {new_size}")
+
+        if image.size == new_size:
+            return image  # same size, no work needed
+
+        return image.resize(new_size)
 
     def tiles(self) -> Iterator[Tile]:
         """Generates the tiles, with their location and sizes calculated.
