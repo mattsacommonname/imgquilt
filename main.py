@@ -5,7 +5,8 @@ from logging import DEBUG, debug, getLogger, INFO, Logger, WARNING
 from math import ceil, floor, sqrt
 from os.path import exists
 from PIL import Image
-from typing import Iterator, List, Tuple
+from statistics import fmean
+from typing import Callable, Iterator, List, Tuple
 
 
 @enum.unique
@@ -301,8 +302,10 @@ class Tableau:
         :return: A list of dimensions for a vector.
         """
 
+        sizer = self._sizer
+
         return [
-            max(image.size[dimension] for image in self._images[vector::direction_vector_count])
+            sizer(image.size[dimension] for image in self._images[vector::direction_vector_count])
             for vector in range(direction_vector_count)
         ]
 
@@ -351,8 +354,10 @@ class Tableau:
         :return: A list of dimensions for a vector.
         """
 
+        sizer = self._sizer
+
         return [
-            max(
+            sizer(
                 image.size[dimension]
                 for image in self._images[
                     vector * direction_vector_count : (vector * direction_vector_count) + direction_vector_count
@@ -397,6 +402,25 @@ class Tableau:
             return image  # same size, no work needed
 
         return image.resize(new_size)
+
+    @property
+    def _sizer(self) -> Callable[[Iterator[int]], int]:
+        """Give the appropriate sizing function for the current sizing mode.
+
+        for `self._sizing_mode`:
+        - `AVERAGE` uses `statistics.fmean`
+        - `LARGEST` uses `max`
+        - `SMALLEST` uses `min`
+
+        :return: An appropriate sizing function.
+        """
+
+        if self._sizing_mode == SizingMode.AVERAGE:
+            return lambda g: floor(fmean(g))
+        elif self._sizing_mode == SizingMode.SMALLEST:
+            return min
+
+        return max
 
     def tiles(self) -> Iterator[Tile]:
         """Generates the tiles, with their location and sizes calculated.
